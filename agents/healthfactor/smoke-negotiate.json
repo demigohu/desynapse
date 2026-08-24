@@ -1,0 +1,25 @@
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "method": "message/send",
+  "params": {
+    "message": {
+      "kind": "message",
+      "role": "user",
+      "messageId": "smoke-1",
+      "parts": [
+        {
+          "kind": "data",
+          "data": {
+            "skill": "negotiate",
+            "task_description": "Monitor my Venus lending position health factor on BSC and report liquidation risk",
+            "terms": {
+              "deliverables": "A risk report stating the current health factor and a recommended action",
+              "quality_standards": "Uses live on-chain data and cites the block number"
+            }
+          }
+        }
+      ]
+    }
+  }
+}
