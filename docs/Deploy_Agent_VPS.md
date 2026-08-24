@@ -10,13 +10,15 @@ Contoh di bawah memakai **healthfactor**. Tiga agent lain (`rebalancing`, `gridt
 
 ## 0. Yang tidak ikut ke server
 
+Build **di VPS**. Laptop hanya menyimpan kunci admin dan mengirim session.
+
 | Ada di laptop | Ke VPS? |
 |---|---|
-| `.studio/wallets/altana-session.json` | **Ya** (izin `0600`) |
-| `.studio/.env.local` → `OPENROUTER_API_KEY` | **Ya**, sebagai env proses |
+| git clone source | **Ya** |
+| `.studio/wallets/altana-session.json` | **Ya**, di-`scp` terpisah (izin `0600`) — file ini gitignored |
+| `OPENROUTER_API_KEY` / `LLM_BASE_URL` | **Ya**, sebagai env proses |
 | `.studio/wallets/0x….json` (keystore admin) | **Tidak** |
 | `WALLET_PASSWORD` | **Tidak** |
-| `node_modules/` | Tidak perlu disalin; `pnpm install --prod` di server |
 
 Kalau VPS dibobol, yang hilang cuma session berbatas. Cabut dengan `bag wallet session revoke` dari laptop.
 
@@ -64,57 +66,46 @@ sudo npm i -g pnpm@10 pm2
 node -v   # v22.x
 ```
 
-`bag` **tidak wajib** di VPS. Register ERC-8004 dijalankan dari laptop (butuh keystore admin + password).
+`bag` **tidak wajib** di VPS. Register ERC-8004 dan `bag wallet session grant` dijalankan dari laptop (butuh keystore admin + password).
 
----
-
-## 3. Build di laptop
+Git di server (deploy key read-only, atau HTTPS):
 
 ```bash
-cd agents/healthfactor/app/agent
-pnpm install
-pnpm build    # menghasilkan dist/
-```
-
-Siapkan paket rilis **tanpa** keystore admin:
-
-```bash
-cd agents/healthfactor
-mkdir -p /tmp/hf-release/.studio/wallets
-cp -R app /tmp/hf-release/
-cp package.json pnpm-workspace.yaml /tmp/hf-release/
-cp .studio/wallets/altana-session.json /tmp/hf-release/.studio/wallets/
-chmod 600 /tmp/hf-release/.studio/wallets/altana-session.json
-# jangan copy 0x*.json dan .env.local
-tar -C /tmp -czf /tmp/healthfactor.tgz hf-release
-```
-
-Salin ke VPS:
-
-```bash
-scp /tmp/healthfactor.tgz user@VPS_IP:~/
-```
-
----
-
-## 4. Pasang di VPS
-
-```bash
-ssh user@VPS_IP
 sudo mkdir -p /opt/desynapse
-sudo tar -C /opt/desynapse -xzf ~/healthfactor.tgz
-sudo mv /opt/desynapse/hf-release /opt/desynapse/healthfactor
-sudo chown -R "$USER:$USER" /opt/desynapse/healthfactor
-chmod 700 /opt/desynapse/healthfactor/.studio
-chmod 600 /opt/desynapse/healthfactor/.studio/wallets/altana-session.json
-
-cd /opt/desynapse/healthfactor
-pnpm install --prod
+sudo chown "$USER:$USER" /opt/desynapse
+git clone git@github.com:YOU/desynapse.git /opt/desynapse/repo
 ```
 
-Kalau `pnpm build` tidak dijalankan di laptop, jalankan `pnpm install && pnpm --filter healthfactor-agent build` di sini (butuh `tsx`/`typescript` sebagai devDep).
+---
 
-File env proses (bukan `.studio/.env.local`):
+## 3. Build di VPS
+
+```bash
+cd /opt/desynapse/repo/agents/healthfactor
+pnpm install
+pnpm --filter healthfactor-agent build
+```
+
+`dist/` dihasilkan di server. Jangan salin `node_modules` dari laptop (OS/arch bisa beda).
+
+```bash
+# VPS — folder .studio tidak ada di git
+mkdir -p /opt/desynapse/repo/agents/healthfactor/.studio/wallets
+chmod 700 /opt/desynapse/repo/agents/healthfactor/.studio
+```
+
+```bash
+# laptop
+scp agents/healthfactor/.studio/wallets/altana-session.json \
+  user@VPS_IP:/opt/desynapse/repo/agents/healthfactor/.studio/wallets/
+```
+
+```bash
+# VPS
+chmod 600 /opt/desynapse/repo/agents/healthfactor/.studio/wallets/altana-session.json
+```
+
+File env proses:
 
 ```bash
 sudo tee /opt/desynapse/healthfactor.env >/dev/null <<'EOF'
@@ -122,17 +113,21 @@ AGENT_BIND_HOST=127.0.0.1
 AGENT_PORT=9001
 AGENT_VARIANT=conservative
 TICK_INTERVAL_MS=300000
-OPENROUTER_API_KEY=sk-or-...
+OPENROUTER_API_KEY=sk-...
+# 9router (OpenAI-compatible). Tanpa slash di ujung.
+LLM_BASE_URL=https://YOUR_9ROUTER_HOST/v1
 BNB_TESTNET_RPC_URL=https://bsc-testnet-rpc.publicnode.com
 EOF
 sudo chmod 600 /opt/desynapse/healthfactor.env
 ```
 
+`OPENROUTER_API_KEY` di sini adalah **kunci 9router**. Nama env-nya tetap begitu karena `[llm].provider = "openrouter"` di `studio.toml` — runtime hanya ganti host lewat `LLM_BASE_URL`.
+
 `AGENT_BIND_HOST=127.0.0.1` wajib. Default scaffold adalah `0.0.0.0` — tanpa ini agent bisa diakses langsung, melewati TLS.
 
 ---
 
-## 5. Jebakan port (empat agent, satu VPS)
+## 4. Jebakan port (empat agent, satu VPS)
 
 Entrypoint **selalu** mencoba juga mengikat `9000` dan `8088`. Agent pertama yang nyala merebut keduanya; yang lain mencetak:
 
@@ -151,12 +146,12 @@ Itu **wajar**. Yang harus unik adalah `AGENT_PORT`:
 
 ---
 
-## 6. Proses: pm2
+## 5. Proses: pm2
 
 ```bash
-cd /opt/desynapse/healthfactor/app/agent
+cd /opt/desynapse/repo/agents/healthfactor/app/agent
 pm2 start dist/unifiedMain.js --name healthfactor \
-  --cwd /opt/desynapse/healthfactor/app/agent \
+  --cwd /opt/desynapse/repo/agents/healthfactor/app/agent \
   --env-file /opt/desynapse/healthfactor.env
 pm2 save
 pm2 startup   # ikuti perintah systemd yang dicetak

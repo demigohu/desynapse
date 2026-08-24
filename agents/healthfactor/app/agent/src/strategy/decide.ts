@@ -69,7 +69,10 @@ export async function propose(
   health: AccountHealth,
   cfg: StrategyConfig,
 ): Promise<Proposal> {
-  if (!process.env.OPENROUTER_API_KEY) {
+  if (
+    !process.env.OPENROUTER_API_KEY &&
+    !process.env.OPENAI_API_KEY
+  ) {
     const fb = fallback(health, cfg);
     fb.reason = `OPENROUTER_API_KEY missing; ${fb.reason}`;
     return fb;

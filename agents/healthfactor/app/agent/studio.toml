@@ -41,6 +41,11 @@ address = "0x886B9cFa0c36dc0fd05F45B03f89fEF56Ed17866"
 [llm]
 provider = "openrouter"
 model = "openai/gpt-4o-mini"
+# OpenAI-compatible base. Default OpenRouter: https://openrouter.ai/api/v1
+# 9router (or any compatible proxy): set this, or override at runtime with
+# LLM_BASE_URL / OPENROUTER_BASE_URL. Env OPENROUTER_API_KEY tetap dipakai
+# sebagai Bearer — isinya kunci 9router, bukan OpenRouter.
+# base_url = "https://YOUR_9ROUTER_HOST/v1"
 
 [payments.erc8183]
 # Read by the Agent: it quotes the FIXED `price`, CLAMPS it to [min,max],

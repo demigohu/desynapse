@@ -56,7 +56,13 @@ import {
  */
 export function buildModel(): LanguageModel {
   const cfg = loadStudioToml();
-  const llmCfg = (cfg.llm ?? {}) as TomlTable;
+  const llmCfg = { ...((cfg.llm ?? {}) as TomlTable) };
+  const override =
+    process.env.LLM_BASE_URL?.trim() ||
+    process.env.OPENROUTER_BASE_URL?.trim();
+  if (override) {
+    llmCfg.base_url = override.replace(/\/+$/, "");
+  }
   const inner = resolveModel(llmCfg);
 
   if (String(llmCfg.provider ?? "openrouter") !== "pieverse-llm") {
