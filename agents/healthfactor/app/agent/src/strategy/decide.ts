@@ -105,7 +105,22 @@ export async function propose(
   } catch (e) {
     const fb = fallback(health, cfg);
     const msg = e instanceof Error ? e.message : String(e);
-    fb.reason = `LLM failed (${msg.slice(0, 120)}); ${fb.reason}`;
+    const body =
+      e &&
+      typeof e === "object" &&
+      "responseBody" in e &&
+      typeof (e as { responseBody?: unknown }).responseBody === "string"
+        ? (e as { responseBody: string }).responseBody
+        : "";
+    if (body) {
+      console.error("[decide] LLM HTTP body:", body.slice(0, 1_000));
+    } else {
+      console.error("[decide] LLM error:", e);
+    }
+    const hint = body
+      ? `${msg} | body=${body.replace(/\s+/g, " ").slice(0, 180)}`
+      : msg;
+    fb.reason = `LLM failed (${hint.slice(0, 220)}); ${fb.reason}`;
     return fb;
   }
 }
