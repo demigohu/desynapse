@@ -6,8 +6,20 @@
 
 type Json = Record<string, unknown>;
 
+function pushText(target: string[], value: unknown) {
+  if (typeof value === "string" && value.length > 0) target.push(value);
+}
+
+function lastJsonObject(text: string): string | null {
+  const start = text.lastIndexOf("{");
+  const end = text.lastIndexOf("}");
+  if (start < 0 || end <= start) return null;
+  return text.slice(start, end + 1);
+}
+
 function sseToChatCompletion(raw: string): string {
-  const pieces: string[] = [];
+  const content: string[] = [];
+  const reasoning: string[] = [];
   let model = "";
   let id = "chatcmpl-sse";
   for (const line of raw.split(/\r?\n/)) {
@@ -26,9 +38,24 @@ function sseToChatCompletion(raw: string): string {
     const choice = (chunk.choices as Json[] | undefined)?.[0];
     const delta = choice?.delta as Json | undefined;
     const message = choice?.message as Json | undefined;
-    if (typeof delta?.content === "string") pieces.push(delta.content);
-    if (typeof message?.content === "string") pieces.push(message.content);
+    pushText(content, delta?.content);
+    pushText(content, message?.content);
+    // gpt-oss / Qwen-style: thinking tokens, not `content`
+    pushText(reasoning, delta?.reasoning_content);
+    pushText(reasoning, delta?.reasoning);
+    pushText(reasoning, message?.reasoning_content);
+    pushText(reasoning, message?.reasoning);
   }
+  const visible = content.join("");
+  const thought = reasoning.join("");
+  const fromThought = lastJsonObject(thought);
+  const assembled =
+    visible.trim() ||
+    fromThought ||
+    thought;
+  console.log(
+    `[llm] 9router SSE assembled; upstream model=${model || "unknown"} contentChars=${visible.length} reasoningChars=${thought.length} used=${visible.trim() ? "content" : fromThought ? "reasoning-json" : "reasoning"}`,
+  );
   return JSON.stringify({
     id,
     object: "chat.completion",
@@ -36,7 +63,7 @@ function sseToChatCompletion(raw: string): string {
     choices: [
       {
         index: 0,
-        message: { role: "assistant", content: pieces.join("") },
+        message: { role: "assistant", content: assembled },
         finish_reason: "stop",
       },
     ],
@@ -72,10 +99,6 @@ export async function llmFetch(
   const text = await res.text();
   if (looksLikeSse(text, contentType)) {
     const assembled = sseToChatCompletion(text);
-    const reported = (JSON.parse(assembled) as Json).model;
-    console.log(
-      `[llm] 9router SSE assembled; upstream model=${String(reported ?? "")}`,
-    );
     return new Response(assembled, {
       status: res.status,
       statusText: res.statusText,

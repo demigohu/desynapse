@@ -12,10 +12,16 @@ import type { AccountHealth } from "../protocol/venus.js";
 import type { StrategyConfig } from "./config.js";
 
 const ProposalSchema = z.object({
-  action: z.enum(["hold", "repay"]),
-  vToken: z.string().optional(),
-  repayPortionBps: z.number().int().min(1).max(10_000).optional(),
-  reason: z.string().min(1).max(500),
+  action: z
+    .string()
+    .transform((s) => s.trim().toLowerCase())
+    .pipe(z.enum(["hold", "repay"])),
+  vToken: z
+    .union([z.string(), z.null()])
+    .optional()
+    .transform((v) => (v == null || v === "" ? undefined : v)),
+  repayPortionBps: z.coerce.number().int().min(1).max(10_000).optional(),
+  reason: z.string().min(1).max(2_000).transform((s) => s.slice(0, 500)),
 });
 
 export type Proposal = z.infer<typeof ProposalSchema> & {
@@ -88,8 +94,8 @@ export async function propose(
         "If HF is at or below the threshold and there is a borrow, you may propose repay. " +
         "repayPortionBps is basis points of THAT market's borrow (2500 = 25%). " +
         "Never exceed 5000. Pick the vToken with the largest borrowUsd. " +
-        "Reply with a single JSON object: " +
-        '{"action":"hold"|"repay","vToken":"0x...","repayPortionBps":2500,"reason":"..."}.',
+        "Reply with ONLY a JSON object, no markdown, no thinking. Example: " +
+        '{"action":"hold","reason":"No borrow on this wallet."}.',
       prompt: JSON.stringify({
         variant: cfg.variant,
         threshold: cfg.threshold,
@@ -99,6 +105,12 @@ export async function propose(
     });
     const parsed = ProposalSchema.safeParse(extractJson(result.text));
     if (!parsed.success) {
+      console.error(
+        "[decide] proposal schema miss:",
+        parsed.error.flatten(),
+        "text=",
+        result.text.slice(0, 500),
+      );
       throw new Error("LLM did not return a valid proposal object");
     }
     return { ...parsed.data, source: "llm" };
