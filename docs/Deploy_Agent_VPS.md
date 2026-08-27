@@ -113,22 +113,13 @@ scp agents/healthfactor/.studio/wallets/altana-session.json \
 chmod 600 /opt/desynapse/repo/agents/healthfactor/.studio/wallets/altana-session.json
 ```
 
-File env proses:
+File env di folder agent, nama `.env` (gitignored). Salin dari example:
 
 ```bash
-sudo tee /opt/desynapse/healthfactor.env >/dev/null <<'EOF'
-AGENT_BIND_HOST=127.0.0.1
-AGENT_PORT=9001
-AGENT_VARIANT=conservative
-TICK_INTERVAL_MS=300000
-OPENROUTER_API_KEY=sk-...
-# 9router (OpenAI-compatible). Tanpa slash di ujung.
-LLM_BASE_URL=https://YOUR_9ROUTER_HOST/v1
-# Exact model id as 9router lists it (bukan nama cantik di UI).
-LLM_MODEL=your-custom-model-id
-BNB_TESTNET_RPC_URL=https://bsc-testnet-rpc.publicnode.com
-EOF
-sudo chmod 600 /opt/desynapse/healthfactor.env
+cp /opt/desynapse/repo/agents/healthfactor/.env.example \
+  /opt/desynapse/repo/agents/healthfactor/.env
+nano /opt/desynapse/repo/agents/healthfactor/.env   # isi key + LLM_MODEL
+chmod 600 /opt/desynapse/repo/agents/healthfactor/.env
 ```
 
 `OPENROUTER_API_KEY` di sini adalah **kunci 9router**. Nama env-nya tetap `OPENROUTER_*` karena `[llm].provider = "openrouter"` di `studio.toml`.
@@ -172,24 +163,34 @@ Itu **wajar**. Yang harus unik adalah `AGENT_PORT`:
 
 ## 5. Proses: pm2
 
+Dari **root repo**. `ecosystem.config.cjs` membaca `agents/<nama>/.env` dan mengabaikan agent yang belum punya file itu.
+
 ```bash
-cd /opt/desynapse/repo/agents/healthfactor/app/agent
-pm2 start dist/unifiedMain.js --name healthfactor \
-  --cwd /opt/desynapse/repo/agents/healthfactor/app/agent \
-  --env-file /opt/desynapse/healthfactor.env
+cd /opt/desynapse/repo
+pm2 delete healthfactor   # kalau sempat start cara lama
+pm2 start ecosystem.config.cjs
 pm2 save
-pm2 startup   # ikuti perintah systemd yang dicetak
+pm2 startup               # ikuti perintah systemd yang dicetak
 pm2 logs healthfactor
 ```
 
-Cwd **harus** `app/agent` supaya `studio.toml` dan path `../../.studio/wallets/altana-session.json` ketemu.
-
-Health check:
+Setelah ubah `.env`:
 
 ```bash
-curl -s http://127.0.0.1:9001/ping
-curl -s http://127.0.0.1:9001/.well-known/agent-card.json
-curl -s http://127.0.0.1:9001/v1/tick
+cd /opt/desynapse/repo
+pm2 reload ecosystem.config.cjs --update-env
+```
+
+Cwd proses adalah `app/agent` (diset di ecosystem) supaya `studio.toml` dan `../../.studio/wallets/altana-session.json` ketemu.
+
+Health check (tanpa `-s` dulu — `-s` menyembunyikan *connection refused*):
+
+```bash
+ss -tlnp | grep -E '9000|9001|8088'
+pm2 env 0 | grep -E 'AGENT_PORT|AGENT_BIND|LLM_'
+curl -v --max-time 3 http://127.0.0.1:9001/ping
+curl -sS --max-time 3 http://127.0.0.1:9001/.well-known/agent-card.json
+curl -sS --max-time 3 http://127.0.0.1:9001/v1/tick
 ```
 
 `/ping` → `{"status":"HEALTHY"}` atau `HEALTHY_BUSY` saat tick berjalan.
@@ -295,7 +296,8 @@ Mereka belum punya loop strategi. Deploy sekarang hanya berguna untuk kartu A2A 
 
 | Kejadian               | Perintah                                                                                                                                                         |
 | ---------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Restart                | `pm2 restart healthfactor`                                                                                                                                       |
+| Restart (kode saja)    | `pm2 restart healthfactor` |
+| Restart + env baru     | `cd /opt/desynapse/repo && pm2 reload ecosystem.config.cjs --update-env` |
 | Log                    | `pm2 logs healthfactor`                                                                                                                                          |
 | Session hampir expired | Di laptop: `bag wallet session grant --force --budget-u 10 --expiry-days 30 --yes`, lalu salin `altana-session.json` baru ke VPS (`chmod 600`) dan `pm2 restart` |
 | Cabut session bocor    | Di laptop: `bag wallet session revoke --yes` — execute berikutnya revert on-chain                                                                                |
