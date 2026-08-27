@@ -62,6 +62,7 @@
  */
 
 import { createHash, randomUUID } from "node:crypto";
+import { resolve as resolvePath } from "node:path";
 import { pathToFileURL } from "node:url";
 import {
   GetSecretValueCommand,
@@ -438,6 +439,9 @@ function sendStreamingResponse(
 // ── serving ───────────────────────────────────────────────────────────────────
 
 async function main(): Promise<void> {
+  console.log(
+    `[seller-agent] boot pid=${process.pid} bind=${process.env.AGENT_BIND_HOST ?? "0.0.0.0"} port=${process.env.AGENT_PORT ?? "9000"}`,
+  );
   await loadRuntimeSecrets();
 
   // Wallet material is NEVER bundled into the deploy artifact. `bag deploy`
@@ -631,11 +635,20 @@ async function main(): Promise<void> {
 
 // Run only as an entrypoint (`node unifiedMain.js` / the hosted runtime),
 // never on import — tests import the builders above without starting a
-// server.
-const isMain =
-  process.argv[1] !== undefined &&
-  import.meta.url === pathToFileURL(process.argv[1]).href;
-if (isMain) {
+// server. pm2 fork mode sets argv[1] to ProcessContainerFork.js, so also
+// treat `pm_id` / `pm_exec_path` as entrypoint.
+function isEntrypoint(): boolean {
+  if (process.env.pm_id !== undefined) return true;
+  const argv1 = process.argv[1];
+  if (!argv1) return false;
+  const exec = process.env.pm_exec_path ?? argv1;
+  try {
+    return import.meta.url === pathToFileURL(resolvePath(exec)).href;
+  } catch {
+    return false;
+  }
+}
+if (isEntrypoint()) {
   main().catch((e) => {
     console.error("[seller-agent] fatal:", e);
     process.exit(1);

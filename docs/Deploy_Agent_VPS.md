@@ -183,6 +183,18 @@ pm2 reload ecosystem.config.cjs --update-env
 
 Cwd proses adalah `app/agent` (diset di ecosystem) supaya `studio.toml` dan `../../.studio/wallets/altana-session.json` ketemu.
 
+Scaffold `bag` hanya memanggil `main()` jika `argv[1]` adalah file entrypoint. pm2 fork mengganti `argv[1]` jadi wrapper-nya, jadi proses `online` tanpa listen. Itu sudah diperbaiki di `unifiedMain.ts` (`pm_id`). **Wajib rebuild** setelah pull:
+
+```bash
+cd /opt/desynapse/repo/agents/healthfactor
+pnpm --filter healthfactor-agent build
+cd /opt/desynapse/repo
+pm2 restart healthfactor
+pm2 logs healthfactor --lines 30
+```
+
+Log yang benar: `[seller-agent] boot ...` lalu `serving on 127.0.0.1:9001`.
+
 Health check (tanpa `-s` dulu — `-s` menyembunyikan *connection refused*):
 
 ```bash
