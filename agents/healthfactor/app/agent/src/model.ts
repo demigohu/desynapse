@@ -28,6 +28,7 @@
  * `notify_funded` work step.
  */
 
+import { createOpenAI } from "@ai-sdk/openai";
 import { loadStudioToml, type TomlTable } from "@bnbagent/studio-runtime/config";
 import { resolveModel } from "@bnbagent/studio-runtime/llm";
 import {
@@ -41,6 +42,7 @@ import {
   type LanguageModelMiddleware,
   wrapLanguageModel,
 } from "ai";
+import { llmFetch } from "./llmCompat.js";
 
 /**
  * Build the AI SDK model object for this project's `[llm]` config.
@@ -66,6 +68,18 @@ export function buildModel(): LanguageModel {
   const modelOverride = process.env.LLM_MODEL?.trim();
   if (modelOverride) {
     llmCfg.model = modelOverride;
+  }
+  // Custom host (9router): talk Chat Completions ourselves so we can fold SSE
+  // streams. resolveModel's OpenAI handler treats a streamed body as invalid JSON.
+  if (override) {
+    const apiKey =
+      process.env.OPENROUTER_API_KEY ?? process.env.OPENAI_API_KEY ?? "";
+    return createOpenAI({
+      baseURL: String(llmCfg.base_url),
+      apiKey,
+      name: "9router",
+      fetch: llmFetch,
+    }).chat(String(llmCfg.model ?? ""));
   }
   const inner = resolveModel(llmCfg);
 
