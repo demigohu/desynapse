@@ -12,17 +12,21 @@ Contoh di bawah memakai **healthfactor**. Tiga agent lain (`rebalancing`, `gridt
 
 Build **di VPS**. Laptop hanya menyimpan kunci admin dan mengirim session.
 
-| Ada di laptop | Ke VPS? |
-|---|---|
-| git clone source | **Ya** |
-| `.studio/wallets/altana-session.json` | **Ya**, di-`scp` terpisah (izin `0600`) — file ini gitignored |
-| `OPENROUTER_API_KEY` / `LLM_BASE_URL` | **Ya**, sebagai env proses |
-| `.studio/wallets/0x….json` (keystore admin) | **Tidak** |
-| `WALLET_PASSWORD` | **Tidak** |
+
+| Ada di laptop                               | Ke VPS?                                                       |
+| ------------------------------------------- | ------------------------------------------------------------- |
+| git clone source                            | **Ya**                                                        |
+| `.studio/wallets/altana-session.json`       | **Ya**, di-`scp` terpisah (izin `0600`) — file ini gitignored |
+| `OPENROUTER_API_KEY` / `LLM_BASE_URL` / `LLM_MODEL` | **Ya**, sebagai env proses                              |
+| `.studio/wallets/0x….json` (keystore admin) | **Tidak**                                                     |
+| `WALLET_PASSWORD`                           | **Tidak**                                                     |
+
 
 Kalau VPS dibobol, yang hilang cuma session berbatas. Cabut dengan `bag wallet session revoke` dari laptop.
 
 ---
+
+
 
 ## 1. Prasyarat laptop
 
@@ -49,6 +53,8 @@ pnpm run tick:once
 ```
 
 ---
+
+
 
 ## 2. Prasyarat VPS
 
@@ -77,6 +83,8 @@ git clone git@github.com:YOU/desynapse.git /opt/desynapse/repo
 ```
 
 ---
+
+
 
 ## 3. Build di VPS
 
@@ -116,16 +124,28 @@ TICK_INTERVAL_MS=300000
 OPENROUTER_API_KEY=sk-...
 # 9router (OpenAI-compatible). Tanpa slash di ujung.
 LLM_BASE_URL=https://YOUR_9ROUTER_HOST/v1
+# Exact model id as 9router lists it (bukan nama cantik di UI).
+LLM_MODEL=your-custom-model-id
 BNB_TESTNET_RPC_URL=https://bsc-testnet-rpc.publicnode.com
 EOF
 sudo chmod 600 /opt/desynapse/healthfactor.env
 ```
 
-`OPENROUTER_API_KEY` di sini adalah **kunci 9router**. Nama env-nya tetap begitu karena `[llm].provider = "openrouter"` di `studio.toml` — runtime hanya ganti host lewat `LLM_BASE_URL`.
+`OPENROUTER_API_KEY` di sini adalah **kunci 9router**. Nama env-nya tetap `OPENROUTER_*` karena `[llm].provider = "openrouter"` di `studio.toml`.
+
+| Env | Isi |
+|---|---|
+| `OPENROUTER_API_KEY` | API key 9router |
+| `LLM_BASE_URL` | Host OpenAI-compatible, tanpa `/` di ujung |
+| `LLM_MODEL` | Model id persis seperti 9router mengirimnya di `POST /v1/chat/completions` |
+
+Tanpa `LLM_MODEL`, runtime pakai default di `studio.toml`: `openai/gpt-4o-mini`.
 
 `AGENT_BIND_HOST=127.0.0.1` wajib. Default scaffold adalah `0.0.0.0` — tanpa ini agent bisa diakses langsung, melewati TLS.
 
 ---
+
+
 
 ## 4. Jebakan port (empat agent, satu VPS)
 
@@ -137,14 +157,18 @@ secondary contract port 9000 unavailable
 
 Itu **wajar**. Yang harus unik adalah `AGENT_PORT`:
 
-| Agent | `AGENT_PORT` | URL publik (ERC-8004) |
-|---|---|---|
-| healthfactor | 9001 | `https://healthfactor.example.com/` |
-| rebalancing | 9002 | `https://rebalancing.example.com/` |
-| gridtrading | 9003 | `https://gridtrading.example.com/` |
-| yieldrouter | 9004 | `https://yieldrouter.example.com/` |
+
+| Agent        | `AGENT_PORT` | URL publik (ERC-8004)               |
+| ------------ | ------------ | ----------------------------------- |
+| healthfactor | 9001         | `https://healthfactor.example.com/` |
+| rebalancing  | 9002         | `https://rebalancing.example.com/`  |
+| gridtrading  | 9003         | `https://gridtrading.example.com/`  |
+| yieldrouter  | 9004         | `https://yieldrouter.example.com/`  |
+
 
 ---
+
+
 
 ## 5. Proses: pm2
 
@@ -171,6 +195,8 @@ curl -s http://127.0.0.1:9001/v1/tick
 `/ping` → `{"status":"HEALTHY"}` atau `HEALTHY_BUSY` saat tick berjalan.
 
 ---
+
+
 
 ## 7. Reverse proxy + TLS (nginx)
 
@@ -207,6 +233,8 @@ curl -s https://healthfactor.example.com/.well-known/agent-card.json
 
 ---
 
+
+
 ## 8. Daftarkan ERC-8004 (dari laptop)
 
 Dijalankan di mesin yang masih punya keystore admin + `WALLET_PASSWORD`. Butuh tBNB untuk gas.
@@ -227,6 +255,8 @@ bag erc8004 show
 
 ---
 
+
+
 ## 9. Smoke test publik
 
 Inspect (read-only, tidak gerak dana):
@@ -243,6 +273,8 @@ Tick menulis log ke `app/agent/data/decisions.jsonl` di server.
 
 ---
 
+
+
 ## 10. Tiga agent sisanya
 
 Masing-masing proyek di `agents/<nama>/`:
@@ -256,15 +288,19 @@ Mereka belum punya loop strategi. Deploy sekarang hanya berguna untuk kartu A2A 
 
 ---
 
+
+
 ## 11. Operasi harian
 
-| Kejadian | Perintah |
-|---|---|
-| Restart | `pm2 restart healthfactor` |
-| Log | `pm2 logs healthfactor` |
+
+| Kejadian               | Perintah                                                                                                                                                         |
+| ---------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Restart                | `pm2 restart healthfactor`                                                                                                                                       |
+| Log                    | `pm2 logs healthfactor`                                                                                                                                          |
 | Session hampir expired | Di laptop: `bag wallet session grant --force --budget-u 10 --expiry-days 30 --yes`, lalu salin `altana-session.json` baru ke VPS (`chmod 600`) dan `pm2 restart` |
-| Cabut session bocor | Di laptop: `bag wallet session revoke --yes` — execute berikutnya revert on-chain |
-| `bag wallet new` lagi | **Jangan.** Memutus jangkar `[wallet].address` vs session |
+| Cabut session bocor    | Di laptop: `bag wallet session revoke --yes` — execute berikutnya revert on-chain                                                                                |
+| `bag wallet new` lagi  | **Jangan.** Memutus jangkar `[wallet].address` vs session                                                                                                        |
+
 
 Cek sisa masa berlaku session (laptop):
 
@@ -274,6 +310,8 @@ cd agents/healthfactor && bag doctor
 
 ---
 
+
+
 ## 12. Checklist sebelum demo juri
 
 - [ ] `https://healthfactor.example.com/ping` → HEALTHY
@@ -282,13 +320,16 @@ cd agents/healthfactor && bag doctor
 - [ ] `pm2 startup` sudah aktif (reboot VPS tidak mematikan agent)
 - [ ] Session Altana masih > 7 hari
 - [ ] tBNB di wallet agent cukup untuk gas (`bag wallet balance`)
-- [ ] `OPENROUTER_API_KEY` terisi di env VPS
+- [ ] `OPENROUTER_API_KEY`, `LLM_BASE_URL`, `LLM_MODEL` terisi di env VPS
 - [ ] Keystore admin **tidak** ada di `/opt/desynapse`
 
 ---
+
+
 
 ## 13. Yang sengaja tidak ada di tutorial ini
 
 - `bag deploy --provider bnb|aws|azure` — trial 48 jam / OAuth / scale-to-zero
 - IPFS — alur sewa v1 tidak menghasilkan deliverable ERC-8183
 - Session key **user** (passkey hire) — itu database marketplace, bukan file `.studio/`
+

@@ -63,6 +63,10 @@ export function buildModel(): LanguageModel {
   if (override) {
     llmCfg.base_url = override.replace(/\/+$/, "");
   }
+  const modelOverride = process.env.LLM_MODEL?.trim();
+  if (modelOverride) {
+    llmCfg.model = modelOverride;
+  }
   const inner = resolveModel(llmCfg);
 
   if (String(llmCfg.provider ?? "openrouter") !== "pieverse-llm") {

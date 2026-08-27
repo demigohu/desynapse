@@ -40,11 +40,11 @@ address = "0x886B9cFa0c36dc0fd05F45B03f89fEF56Ed17866"
 
 [llm]
 provider = "openrouter"
+# Default model id. Override at runtime with env LLM_MODEL (exact 9router id).
 model = "openai/gpt-4o-mini"
 # OpenAI-compatible base. Default OpenRouter: https://openrouter.ai/api/v1
-# 9router (or any compatible proxy): set this, or override at runtime with
-# LLM_BASE_URL / OPENROUTER_BASE_URL. Env OPENROUTER_API_KEY tetap dipakai
-# sebagai Bearer — isinya kunci 9router, bukan OpenRouter.
+# 9router: set LLM_BASE_URL (and LLM_MODEL) in the process env instead of
+# committing a host here. OPENROUTER_API_KEY is the Bearer — 9router key.
 # base_url = "https://YOUR_9ROUTER_HOST/v1"
 
 [payments.erc8183]
